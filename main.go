@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"runtime"
@@ -26,17 +25,25 @@ func notify(title, message string) error {
 }
 
 func printUsage() {
+	fmt.Println()
 	fmt.Println("Usage:")
-	fmt.Println("\tjn <hh:mm>")
-	fmt.Println("\tjn <ss>s | <mm>m | <hh>h")
+	fmt.Println("\tjn [Time option]")
+	fmt.Println()
+	fmt.Println("Time options:")
+	fmt.Println("\t<ss>s\tTime and suffix \"s\": seconds")
+	fmt.Println("\t<mm>m\tTime and suffix \"m\": minutes")
+	fmt.Println("\t<hh>h\tTime and suffix \"h\": hours")
+	fmt.Println("\t<hh:mm>\tHour:minute")
+	fmt.Println()
 }
 
 func main() {
 	args := os.Args
 
 	if len(args) < 2 {
-		log.Fatalf("Time argument is required")
+		fmt.Println("\nERROR: Time argument is required")
 		printUsage()
+		os.Exit(1)
 	}
 
 	timeArg := args[1]
@@ -51,7 +58,8 @@ func main() {
 	millis, err := getTime(timeArg)
 
 	if err != nil {
-		log.Fatalf("Error scheduling task: %s", err.Error())
+		fmt.Printf("Error scheduling task: %s\n", err.Error())
+		os.Exit(1)
 	}
 
 	wg.Add(1)
@@ -60,7 +68,7 @@ func main() {
 		wg.Done()
 	})
 
-	log.Printf("Alert scheduled for %s\n", timeArg)
+	fmt.Printf("Alert scheduled for %s\n", timeArg)
 
 	wg.Wait()
 }
@@ -68,10 +76,10 @@ func main() {
 func schedule(epochMillis int64, action func()) {
 	delayMillis := epochMillis - time.Now().UnixMilli()
 
-	log.Println(fmt.Sprintf("Scheduling task to %d seconds later", delayMillis/1000))
+	fmt.Printf("Scheduling task to %d seconds later", delayMillis/1000)
 
 	if delayMillis < 0 {
-		log.Println("epochMillis is in the past in schedule function")
+		fmt.Println("epochMillis is in the past in schedule function")
 		return
 	}
 
