@@ -50,9 +50,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	config := loadConfig()
+
 	timeArg := args[1]
-	notificationName := timeArg
-	title := "Unknown"
+	notificationName := config["DEFAULT_NOTIFICATION_NAME"]
+	title := config["DEFAULT_TITLE"]
+
+	if notificationName == "" {
+		notificationName = "Time has been finalized"
+	}
+
+	if title == "" {
+		title = "Unknown"
+	}
 
 	if len(args) > 2 {
 		notificationName = args[2]
