@@ -29,7 +29,7 @@ func notify(title, message string) error {
 func printUsage() {
 	fmt.Println()
 	fmt.Println("Usage:")
-	fmt.Println("\tjn [Time option]")
+	fmt.Println("\tjn [Time option] [Notification title] [Task title]")
 	fmt.Println()
 	fmt.Println("Time options:")
 	fmt.Println("\t<ss>s\tTime and suffix \"s\": seconds")
@@ -37,6 +37,8 @@ func printUsage() {
 	fmt.Println("\t<hh>h\tTime and suffix \"h\": hours")
 	fmt.Println("\t<hh:mm>\tHour:minute")
 	fmt.Println()
+	fmt.Println("Notification title: The title for the notification to be shown")
+	fmt.Println("Task title: The title of the task to be executed during focus time; this will be logged in the CSV file.")
 }
 
 func main() {
@@ -49,12 +51,16 @@ func main() {
 	}
 
 	timeArg := args[1]
-	taskName := timeArg
+	notificationName := timeArg
 	title := "Unknown"
 
 	if len(args) > 2 {
-		taskName = args[2]
-		title = taskName
+		notificationName = args[2]
+		title = notificationName
+	}
+
+	if len(args) > 3 {
+		title = args[3]
 	}
 
 	millis, err := getTime(timeArg)
@@ -67,7 +73,7 @@ func main() {
 	wg.Add(1)
 
 	schedule(millis, func(now, epochMillis int64) {
-		notify(title, fmt.Sprintf("Time completed: %s", taskName))
+		notify(notificationName, fmt.Sprintf("Time completed: %s", title))
 		logData([][]string{{strconv.Itoa(int(now)), strconv.Itoa(int(epochMillis)), title}})
 		wg.Done()
 	})
