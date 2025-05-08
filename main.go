@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/csv"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -48,7 +50,7 @@ func main() {
 
 	timeArg := args[1]
 	taskName := timeArg
-	title := "Time completed"
+	title := "Unknown"
 
 	if len(args) > 2 {
 		taskName = args[2]
@@ -64,8 +66,9 @@ func main() {
 
 	wg.Add(1)
 
-	schedule(millis, func() {
+	schedule(millis, func(now, epochMillis int64) {
 		notify(title, fmt.Sprintf("Time completed: %s", taskName))
+		logData([][]string{{strconv.Itoa(int(now)), strconv.Itoa(int(epochMillis)), title}})
 		wg.Done()
 	})
 
@@ -74,7 +77,7 @@ func main() {
 	wg.Wait()
 }
 
-func schedule(epochMillis int64, action func()) {
+func schedule(epochMillis int64, action func(int64, int64)) {
 	now := time.Now().UnixMilli()
 	delayMillis := epochMillis - now
 
@@ -89,7 +92,7 @@ func schedule(epochMillis int64, action func()) {
 
 	go func() {
 		time.Sleep(time.Duration(delayMillis) * time.Millisecond)
-		action()
+		action(now, epochMillis)
 	}()
 }
 
@@ -163,35 +166,111 @@ func getTime(timeArg string) (int64, error) {
 	return result, nil
 }
 
-func progressBar(init, end int64) {
-    if init >= end {
-        return
-    }
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return !os.IsNotExist(err)
+}
 
-    const width = 50
-    bar := fmt.Sprintf("[%s]", strings.Repeat(" ", width))
-    
+func logData(data [][]string) error {
+	config := loadConfig()
+
+	filePath := config["CSV_PATH"]
+
+	// Default path
+	if filePath == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		filePath = filepath.Join(home, ".jn.csv")
+	}
+
+	// Check if file exists to determine if headers are needed
+	needsHeader := !fileExists(filePath)
+
+	file, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	// Write headers if new file
+	if needsHeader {
+		headers := []string{"init_time_ms", "end_time_ms", "task_name"}
+		if err := writer.Write(headers); err != nil {
+			return fmt.Errorf("error writing headers: %w", err)
+		}
+	}
+
+	// Write the actual data
+	return writer.WriteAll(data)
+}
+
+func progressBar(init, end int64) {
+	if init >= end {
+		return
+	}
+
+	const width = 50
+	bar := fmt.Sprintf("[%s]", strings.Repeat(" ", width))
+
 	fmt.Println()
-    for {
-        now := time.Now().UnixMilli()
-        progress := float64(now-init) / float64(end-init)
-        
-        filled := int(progress * float64(width))
-        progressBar := bar[:1] + strings.Repeat("█", filled) +
-            strings.Repeat("░", width-filled) + bar[width+1:]
+	for {
+		now := time.Now().UnixMilli()
+		progress := float64(now-init) / float64(end-init)
+
+		filled := int(progress * float64(width))
+		progressBar := bar[:1] + strings.Repeat("█", filled) +
+			strings.Repeat("░", width-filled) + bar[width+1:]
 
 		// Avoid round issues
 		percentage := min(progress*100, 100.0)
-        
-        fmt.Printf("\r%s %.1f%%", progressBar, percentage)
-        
-        if progress >= 1.0 {
-            break
-        }
 
-        time.Sleep(time.Millisecond * 500)
-    }
-    fmt.Println() // Add newline at the end
+		fmt.Printf("\r%s %.1f%%", progressBar, percentage)
+
+		if progress >= 1.0 {
+			break
+		}
+
+		time.Sleep(time.Millisecond * 500)
+	}
+	fmt.Println() // Add newline at the end
 }
 
+func loadConfig() map[string]string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Println("Error getting home dir:", err)
+		return nil
+	}
 
+	configPath := filepath.Join(home, ".jnconfig")
+
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		// No config file found, fallback
+		return nil
+	}
+
+	lines := strings.Split(string(content), "\n")
+	config := make(map[string]string)
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		val := strings.TrimSpace(parts[1])
+		config[key] = val
+	}
+
+	return config
+}
