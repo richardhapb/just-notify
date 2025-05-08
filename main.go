@@ -63,6 +63,7 @@ func main() {
 	}
 
 	wg.Add(1)
+
 	schedule(millis, func() {
 		notify(title, fmt.Sprintf("Time completed: %s", taskName))
 		wg.Done()
@@ -74,14 +75,17 @@ func main() {
 }
 
 func schedule(epochMillis int64, action func()) {
-	delayMillis := epochMillis - time.Now().UnixMilli()
+	now := time.Now().UnixMilli()
+	delayMillis := epochMillis - now
 
-	fmt.Printf("Scheduling task to %d seconds later", delayMillis/1000)
+	fmt.Printf("Scheduling task to %d seconds later\n", delayMillis/1000)
 
 	if delayMillis < 0 {
 		fmt.Println("epochMillis is in the past in schedule function")
 		return
 	}
+
+	go progressBar(now, epochMillis)
 
 	go func() {
 		time.Sleep(time.Duration(delayMillis) * time.Millisecond)
@@ -158,3 +162,36 @@ func getTime(timeArg string) (int64, error) {
 
 	return result, nil
 }
+
+func progressBar(init, end int64) {
+    if init >= end {
+        return
+    }
+
+    const width = 50
+    bar := fmt.Sprintf("[%s]", strings.Repeat(" ", width))
+    
+	fmt.Println()
+    for {
+        now := time.Now().UnixMilli()
+        progress := float64(now-init) / float64(end-init)
+        
+        filled := int(progress * float64(width))
+        progressBar := bar[:1] + strings.Repeat("█", filled) +
+            strings.Repeat("░", width-filled) + bar[width+1:]
+
+		// Avoid round issues
+		percentage := min(progress*100, 100.0)
+        
+        fmt.Printf("\r%s %.1f%%", progressBar, percentage)
+        
+        if progress >= 1.0 {
+            break
+        }
+
+        time.Sleep(time.Millisecond * 500)
+    }
+    fmt.Println() // Add newline at the end
+}
+
+
