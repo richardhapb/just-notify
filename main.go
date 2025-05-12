@@ -66,7 +66,6 @@ func main() {
 
 	if len(args) > 2 {
 		notificationName = args[2]
-		title = notificationName
 	}
 
 	if len(args) > 3 {
