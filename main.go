@@ -45,7 +45,7 @@ func main() {
 	args := os.Args
 
 	if len(args) < 2 {
-		fmt.Println("\nERROR: Time argument is required")
+		fmt.Fprintln(os.Stderr, "\nERROR: Time argument is required")
 		printUsage()
 		os.Exit(1)
 	}
@@ -75,7 +75,7 @@ func main() {
 	millis, err := getTime(timeArg)
 
 	if err != nil {
-		fmt.Printf("Error scheduling task: %s\n", err.Error())
+		fmt.Fprintf(os.Stderr, "Error scheduling task: %s\n", err.Error())
 		os.Exit(1)
 	}
 
