@@ -1,25 +1,53 @@
 package database
 
 import (
-	"os"
-	"path/filepath"
 	"encoding/csv"
 	"fmt"
 	"just-notify/config"
+	"os"
+	"path/filepath"
+	"strconv"
 )
 
-func LogData(data [][]string) error {
+type LogEntry struct {
+	InitTime int64
+	EndTime  int64
+	TaskName string
+}
+
+func LogData(data LogEntry) error {
 	config := config.LoadConfig()
 
 	filePath := config["CSV_PATH"]
+	connStr := config["CONN"]
 
 	// Default path
-	if filePath == "" {
+	if connStr == "" && filePath == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return err
 		}
 		filePath = filepath.Join(home, ".jn.csv")
+	}
+
+	if connStr != "" {
+		conn, err := OpenDB(connStr)
+
+		if err != nil {
+			return err
+		}
+
+		defer conn.Close()
+
+		if err := conn.InitSchema(); err != nil {
+			return err
+		}
+
+		if err := conn.Insert(&data); err != nil {
+			return err
+		}
+
+		return nil
 	}
 
 	// Check if file exists to determine if headers are needed
@@ -43,9 +71,8 @@ func LogData(data [][]string) error {
 	}
 
 	// Write the actual data
-	return writer.WriteAll(data)
+	return writer.WriteAll([][]string{{strconv.Itoa(int(data.InitTime)), strconv.Itoa(int(data.EndTime)), data.TaskName}})
 }
-
 
 func fileExists(path string) bool {
 	_, err := os.Stat(path)

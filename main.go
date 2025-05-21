@@ -7,7 +7,6 @@ import (
 	"just-notify/database"
 	"just-notify/notification"
 	"os"
-	"strconv"
 	"sync"
 )
 
@@ -55,7 +54,14 @@ func main() {
 
 	notification.Schedule(millis, func(now, epochMillis int64) {
 		notification.Notify(notificationName, fmt.Sprintf("Time completed: %s", title))
-		database.LogData([][]string{{strconv.Itoa(int(now)), strconv.Itoa(int(epochMillis)), title}})
+		if err := database.LogData(database.LogEntry{
+			InitTime:    now,
+			EndTime: epochMillis,
+			TaskName:       title,
+		}); err != nil {
+			fmt.Fprintf(os.Stderr, "error inserting data in database: %s", err)
+			os.Exit(1)
+		}
 		wg.Done()
 	})
 
