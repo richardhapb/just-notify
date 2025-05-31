@@ -77,18 +77,3 @@ func GetTime(timeArg string) (int64, error) {
 	return result, nil
 }
 
-
-func PrintUsage() {
-	fmt.Println()
-	fmt.Println("Usage:")
-	fmt.Println("\tjn [Time option] [Notification title] [Task title]")
-	fmt.Println()
-	fmt.Println("Time options:")
-	fmt.Println("\t<ss>s\tTime and suffix \"s\": seconds")
-	fmt.Println("\t<mm>m\tTime and suffix \"m\": minutes")
-	fmt.Println("\t<hh>h\tTime and suffix \"h\": hours")
-	fmt.Println("\t<hh:mm>\tHour:minute")
-	fmt.Println()
-	fmt.Println("Notification title: The title for the notification to be shown")
-	fmt.Println("Task title: The title of the task to be executed during focus time; this will be logged in the CSV file.")
-}
