@@ -42,7 +42,8 @@ func (l *LogDB) InitSchema() error {
 		id SERIAL PRIMARY KEY,
 		init_time_ms BIGINT NOT NULL,
 		end_time_ms BIGINT NOT NULL,
-		task_name TEXT NOT NULL
+		category TEXT NOT NULL,
+		description TEXT
 	);`
 
 	_, err := l.db.Exec(schema)
@@ -54,17 +55,17 @@ func (l *LogDB) Insert(data *LogEntry) error {
 	switch l.driver {
 	case "sqlite3":
 		stmt = `
-		INSERT INTO logs (init_time_ms, end_time_ms, task_name)
-		VALUES (?, ?, ?)`
+		INSERT INTO logs (init_time_ms, end_time_ms, category, description)
+		VALUES (?, ?, ?, ?)`
 	case "postgres":
 		stmt = `
-			INSERT INTO logs (init_time_ms, end_time_ms, task_name)
-			VALUES ($1, $2, $3)`
+			INSERT INTO logs (init_time_ms, end_time_ms, category, description)
+			VALUES ($1, $2, $3, $4)`
 	default:
 		return fmt.Errorf("unknown driver in connection %v", l)
 	}
 
-	_, err := l.db.Exec(stmt, data.InitTime, data.EndTime, data.TaskName)
+	_, err := l.db.Exec(stmt, data.InitTime, data.EndTime, data.Category, data.Description)
 	return err
 }
 

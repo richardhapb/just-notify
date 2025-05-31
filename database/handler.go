@@ -10,16 +10,27 @@ import (
 )
 
 type LogEntry struct {
-	InitTime int64
-	EndTime  int64
-	TaskName string
+	InitTime    int64
+	EndTime     int64
+	Category    string
+	Description string
 }
 
-func LogData(data LogEntry) error {
+func LogData(data LogEntry, useDatabase bool, connString ...string) error {
 	config := config.LoadConfig()
 
+	var connStr string
+
 	filePath := config["CSV_PATH"]
-	connStr := config["CONN"]
+	if len(connString) > 0 && connString[0] != "" {
+		connStr = connString[0]
+	} else {
+		connStr = config["CONN"]
+	}
+
+	if useDatabase && connStr == "" {
+		return fmt.Errorf("The database is enabled, but there is no connection string provided.")
+	}
 
 	// Default path
 	if connStr == "" && filePath == "" {
@@ -30,7 +41,7 @@ func LogData(data LogEntry) error {
 		filePath = filepath.Join(home, ".jn.csv")
 	}
 
-	if connStr != "" {
+	if connStr != "" && useDatabase {
 		conn, err := OpenDB(connStr)
 
 		if err != nil {
@@ -64,14 +75,14 @@ func LogData(data LogEntry) error {
 
 	// Write headers if new file
 	if needsHeader {
-		headers := []string{"init_time_ms", "end_time_ms", "task_name"}
+		headers := []string{"init_time_ms", "end_time_ms", "category", "description"}
 		if err := writer.Write(headers); err != nil {
 			return fmt.Errorf("error writing headers: %w", err)
 		}
 	}
 
 	// Write the actual data
-	return writer.WriteAll([][]string{{strconv.Itoa(int(data.InitTime)), strconv.Itoa(int(data.EndTime)), data.TaskName}})
+	return writer.WriteAll([][]string{{strconv.Itoa(int(data.InitTime)), strconv.Itoa(int(data.EndTime)), data.Category, data.Description}})
 }
 
 func fileExists(path string) bool {
