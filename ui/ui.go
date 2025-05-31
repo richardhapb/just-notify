@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func ProgressBar(init, end int64) {
+func ProgressBar(closeSignal chan bool, init, end int64) {
 	if init >= end {
 		return
 	}
@@ -16,6 +16,16 @@ func ProgressBar(init, end int64) {
 
 	fmt.Println()
 	for {
+
+		select {
+		case _ = <-closeSignal:
+			// Clean up the progress bar and exit
+			fmt.Printf("\r%s 100.0%%\n\n", 
+				bar[:1] + strings.Repeat("█", width) + bar[width+1:])
+			return
+		default:
+		}
+
 		now := time.Now().UnixMilli()
 		progress := float64(now-init) / float64(end-init)
 
@@ -36,4 +46,3 @@ func ProgressBar(init, end int64) {
 	}
 	fmt.Println() // Add newline at the end
 }
-

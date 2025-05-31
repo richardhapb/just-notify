@@ -22,7 +22,7 @@ func Notify(title, message string) error {
 
 
 
-func Schedule(epochMillis int64, action func(int64, int64)) {
+func Schedule(closeSignal chan bool, epochMillis int64, action func(int64, int64)) {
 	now := time.Now().UnixMilli()
 	delayMillis := epochMillis - now
 
@@ -33,10 +33,7 @@ func Schedule(epochMillis int64, action func(int64, int64)) {
 		return
 	}
 
-	go ui.ProgressBar(now, epochMillis)
+	ui.ProgressBar(closeSignal, now, epochMillis)
 
-	go func() {
-		time.Sleep(time.Duration(delayMillis) * time.Millisecond)
-		action(now, epochMillis)
-	}()
+	action(now, epochMillis)
 }

@@ -1,13 +1,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"just-notify/commands"
 	"just-notify/config"
 	"just-notify/database"
 	"just-notify/notification"
 	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 )
 
 var wg sync.WaitGroup
@@ -52,12 +55,14 @@ func main() {
 
 	wg.Add(1)
 
-	notification.Schedule(millis, func(now, epochMillis int64) {
+	closeSignal := make(chan bool, 1)
+
+	go notification.Schedule(closeSignal, millis, func(now, epochMillis int64) {
 		notification.Notify(notificationName, fmt.Sprintf("Time completed: %s", title))
 		if err := database.LogData(database.LogEntry{
-			InitTime:    now,
-			EndTime: epochMillis,
-			TaskName:       title,
+			InitTime: now,
+			EndTime:  epochMillis,
+			TaskName: title,
 		}); err != nil {
 			fmt.Fprintf(os.Stderr, "error inserting data in database: %s", err)
 			os.Exit(1)
@@ -67,5 +72,17 @@ func main() {
 
 	fmt.Printf("Alert scheduled for %s\n", timeArg)
 
+	go func() {
+		cx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+		defer stop()
+
+		<-cx.Done()
+		closeSignal <- true
+
+		wg.Wait()
+		os.Exit(0)
+	}()
+
 	wg.Wait()
+
 }
