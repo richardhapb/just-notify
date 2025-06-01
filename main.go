@@ -23,6 +23,7 @@ type ArgsCli struct {
 	description string
 	useDatabase bool
 	connString  string
+	unlimited   bool
 }
 
 type app struct {
@@ -44,7 +45,7 @@ func main() {
 
 	args := parseArgs()
 
-	if args.time == "" {
+	if args.time == "" && !args.unlimited {
 		fmt.Fprintln(os.Stderr, "\nERROR: Time argument is required")
 		flag.PrintDefaults()
 		os.Exit(1)
@@ -59,9 +60,15 @@ func main() {
 		}
 	}
 
-	millis, err := commands.GetTime(args.time)
-	if err != nil {
-		log.Fatalf("Error scheduling task: %v", err)
+	var millis int64
+
+	if !args.unlimited {
+		var err error
+		millis, err = commands.GetTime(args.time)
+		if err != nil {
+			log.Fatalf("Error scheduling task: %v", err)
+		}
+		fmt.Printf("Alert scheduled for %s\n", args.time)
 	}
 
 	app.wg.Add(1)
@@ -69,7 +76,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 
-	go notification.Schedule(app.closeSignal, millis, func(now, epochMillis int64) {
+	go notification.Schedule(!args.unlimited, app.closeSignal, millis, func(now, epochMillis int64) {
 		notification.Notify(args.notif, fmt.Sprintf("Time completed: %s", args.category))
 		if err := database.LogData(database.LogEntry{
 			InitTime:    now,
@@ -83,8 +90,6 @@ func main() {
 		app.wg.Done()
 	})
 
-	fmt.Printf("Alert scheduled for %s\n", args.time)
-
 	go func() {
 		now := time.Now().UnixMilli()
 		select {
@@ -92,7 +97,7 @@ func main() {
 			app.closeSignal <- true
 			finish := time.Now().UnixMilli()
 
-			fmt.Printf("%d minutes trascurred", (finish - now) / 1000 * 60)
+			fmt.Printf("\n\n%d minutes trascurred", (finish-now)/6000)
 		}
 	}()
 
@@ -107,6 +112,7 @@ func parseArgs() ArgsCli {
 	var description string
 	var useDatabase bool
 	var connString string
+	var unlimited bool
 
 	flag.StringVar(&rawTime, "t", "", "Time scheduled for the notification (e.g. <mm>m = Time and suffix \"m\" for minutes, or <hh:mm>Hour:minute")
 	flag.StringVar(&category, "c", "", "Category: The category of the task to be executed during focus time. e.g. work.")
@@ -114,6 +120,7 @@ func parseArgs() ArgsCli {
 	flag.BoolVar(&useDatabase, "d", false, "Indicate whether a SQL database will be used")
 	flag.StringVar(&connString, "s", "", "Connection string used to connect to the database; it only works if the database flag is enabled.")
 	flag.StringVar(&description, "l", "", "Optional: Details of the task")
+	flag.BoolVar(&unlimited, "u", false, "Unlimited time")
 	flag.Parse()
 
 	config := config.LoadConfig()
@@ -141,5 +148,6 @@ func parseArgs() ArgsCli {
 		description: description,
 		useDatabase: useDatabase,
 		connString:  connString,
+		unlimited:   unlimited,
 	}
 }

@@ -1,13 +1,12 @@
 package notification
 
 import (
+	"fmt"
 	"just-notify/ui"
 	"os/exec"
 	"runtime"
 	"time"
-	"fmt"
 )
-
 
 func Notify(title, message string) error {
 	switch runtime.GOOS {
@@ -20,20 +19,48 @@ func Notify(title, message string) error {
 	}
 }
 
-
-
-func Schedule(closeSignal chan bool, epochMillis int64, action func(int64, int64)) {
+func Schedule(enableProgressBar bool, closeSignal chan bool, epochMillis int64, action func(int64, int64)) {
 	now := time.Now().UnixMilli()
-	delayMillis := epochMillis - now
 
-	fmt.Printf("Scheduling task to %d seconds later\n", delayMillis/1000)
+	if epochMillis != 0 {
+		delayMillis := epochMillis - now
+		fmt.Printf("Scheduling task to %d seconds later\n", delayMillis/1000)
 
-	if delayMillis < 0 {
-		fmt.Println("epochMillis is in the past in schedule function")
-		return
+		if delayMillis < 0 {
+			fmt.Println("epochMillis is in the past in schedule function")
+			return
+		}
 	}
 
-	ui.ProgressBar(closeSignal, now, epochMillis)
+	if enableProgressBar {
+		ui.ProgressBar(closeSignal, now, epochMillis)
+	} else {
+		exit := false
+		for {
+			ticker := time.NewTicker(time.Second)
+			defer ticker.Stop()
+
+			for {
+				select {
+				case <-closeSignal:
+					exit = true
+				case <-ticker.C:
+					elapsed := time.Since(time.UnixMilli(now)).Round(time.Second)
+					hours := int(elapsed.Hours())
+					minutes := int(elapsed.Minutes()) % 60
+					seconds := int(elapsed.Seconds()) % 60
+					fmt.Printf("\rTime elapsed: %02d:%02d:%02d", hours, minutes, seconds)
+				}
+				if exit {
+					break
+				}
+
+			}
+			if exit {
+				break
+			}
+		}
+	}
 
 	action(now, epochMillis)
 }
