@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 )
 
 type ArgsCli struct {
@@ -85,9 +86,13 @@ func main() {
 	fmt.Printf("Alert scheduled for %s\n", args.time)
 
 	go func() {
+		now := time.Now().UnixMilli()
 		select {
 		case <-ctx.Done():
 			app.closeSignal <- true
+			finish := time.Now().UnixMilli()
+
+			fmt.Printf("%d minutes trascurred", (finish - now) / 1000 * 60)
 		}
 	}()
 
