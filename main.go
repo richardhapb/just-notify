@@ -8,6 +8,7 @@ import (
 	"just-notify/config"
 	"just-notify/database"
 	"just-notify/notification"
+	"log"
 	"os"
 	"os/signal"
 	"sync"
@@ -23,9 +24,23 @@ type ArgsCli struct {
 	connString  string
 }
 
-var wg sync.WaitGroup
+type app struct {
+	wg          sync.WaitGroup
+	closeSignal chan bool
+	cfg         map[string]string
+}
+
+const (
+	defaultCategory = "Unknown"
+	defaultNotif    = "Time has been finalized"
+)
 
 func main() {
+	app := &app{
+		closeSignal: make(chan bool, 1),
+		cfg:         config.LoadConfig(),
+	}
+
 	args := parseArgs()
 
 	if args.time == "" {
@@ -34,24 +49,26 @@ func main() {
 		os.Exit(1)
 	}
 
-	if args.useDatabase && args.connString == "" {
-		if config.LoadConfig()["CONN"] == "" {
-			fmt.Fprintf(os.Stderr, "The database is enabled, but there is no connection string provided.")
+	if args.useDatabase {
+		if args.connString == "" && app.cfg["CONN"] == "" {
+			log.Fatal("Database enabled but no connection string provided")
+		}
+		if args.connString == "" {
+			args.connString = app.cfg["CONN"]
 		}
 	}
 
 	millis, err := commands.GetTime(args.time)
-
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error scheduling task: %s\n", err.Error())
-		os.Exit(1)
+		log.Fatalf("Error scheduling task: %v", err)
 	}
 
-	wg.Add(1)
+	app.wg.Add(1)
 
-	closeSignal := make(chan bool, 1)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
 
-	go notification.Schedule(closeSignal, millis, func(now, epochMillis int64) {
+	go notification.Schedule(app.closeSignal, millis, func(now, epochMillis int64) {
 		notification.Notify(args.notif, fmt.Sprintf("Time completed: %s", args.category))
 		if err := database.LogData(database.LogEntry{
 			InitTime:    now,
@@ -62,23 +79,19 @@ func main() {
 			fmt.Fprintf(os.Stderr, "error inserting data in database: %s", err)
 			os.Exit(1)
 		}
-		wg.Done()
+		app.wg.Done()
 	})
 
 	fmt.Printf("Alert scheduled for %s\n", args.time)
 
 	go func() {
-		cx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
-		defer stop()
-
-		<-cx.Done()
-		closeSignal <- true
-
-		wg.Wait()
-		os.Exit(0)
+		select {
+		case <-ctx.Done():
+			app.closeSignal <- true
+		}
 	}()
 
-	wg.Wait()
+	app.wg.Wait()
 
 }
 
