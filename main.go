@@ -96,6 +96,7 @@ func main() {
 		case <-ctx.Done():
 			app.closeSignal <- true
 			elapsed := time.Since(startTime)
+			time.Sleep(time.Duration(100) * time.Millisecond)
 			fmt.Printf("\n\nTime elapsed: %.2f minutes\n", elapsed.Minutes())
 		}
 	}()
