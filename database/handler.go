@@ -17,23 +17,18 @@ type LogEntry struct {
 }
 
 func LogData(data LogEntry, useDatabase bool, connString ...string) error {
-	config := config.LoadConfig()
 
 	var connStr string
+	if len(connString) > 0 {
+		connStr = connString[0]
+	}
+
+	config := config.LoadConfig()
 
 	filePath := config["CSV_PATH"]
-	if len(connString) > 0 && connString[0] != "" {
-		connStr = connString[0]
-	} else {
-		connStr = config["CONN"]
-	}
-
-	if useDatabase && connStr == "" {
-		return fmt.Errorf("The database is enabled, but there is no connection string provided.")
-	}
 
 	// Default path
-	if connStr == "" && filePath == "" {
+	if !useDatabase && filePath == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return err

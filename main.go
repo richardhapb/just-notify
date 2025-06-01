@@ -91,7 +91,6 @@ func main() {
 	}()
 
 	app.wg.Wait()
-
 }
 
 func parseArgs(cfg map[string]string) ArgsCli {

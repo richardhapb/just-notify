@@ -24,12 +24,12 @@ func Schedule(enableProgressBar bool, closeSignal chan bool, epochMillis int64, 
 
 	if epochMillis != 0 {
 		delayMillis := epochMillis - now
-		fmt.Printf("Scheduling task to %d seconds later\n", delayMillis/1000)
-
 		if delayMillis < 0 {
 			fmt.Println("epochMillis is in the past in schedule function")
 			return
 		}
+
+		fmt.Printf("Scheduling task to %d seconds later\n", delayMillis/1000)
 	}
 
 	if enableProgressBar {
