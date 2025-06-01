@@ -91,13 +91,12 @@ func main() {
 	})
 
 	go func() {
-		now := time.Now().UnixMilli()
+		startTime := time.Now()
 		select {
 		case <-ctx.Done():
 			app.closeSignal <- true
-			finish := time.Now().UnixMilli()
-
-			fmt.Printf("\n\n%d minutes trascurred", (finish-now)/6000)
+			elapsed := time.Since(startTime)
+			fmt.Printf("\n\nTime elapsed: %.2f minutes\n", elapsed.Minutes())
 		}
 	}()
 
