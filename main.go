@@ -43,21 +43,10 @@ func main() {
 		cfg:         config.LoadConfig(),
 	}
 
-	args := parseArgs()
-
-	if args.time == "" && !args.unlimited {
-		fmt.Fprintln(os.Stderr, "\nERROR: Time argument is required")
+	args := parseArgs(app.cfg)
+	if err := validateArgs(&args, app.cfg); err != nil {
 		flag.PrintDefaults()
-		os.Exit(1)
-	}
-
-	if args.useDatabase {
-		if args.connString == "" && app.cfg["CONN"] == "" {
-			log.Fatal("Database enabled but no connection string provided")
-		}
-		if args.connString == "" {
-			args.connString = app.cfg["CONN"]
-		}
+		log.Fatalln(err)
 	}
 
 	var millis int64
@@ -105,7 +94,7 @@ func main() {
 
 }
 
-func parseArgs() ArgsCli {
+func parseArgs(cfg map[string]string) ArgsCli {
 	var rawTime string
 	var notif string
 	var category string
@@ -123,22 +112,20 @@ func parseArgs() ArgsCli {
 	flag.BoolVar(&unlimited, "u", false, "Unlimited time")
 	flag.Parse()
 
-	config := config.LoadConfig()
-
 	if category == "" {
-		category = config["DEFAULT_TITLE"]
+		category = cfg["DEFAULT_CATEGORY"]
 	}
 
 	if notif == "" {
-		notif = config["DEFAULT_NOTIFICATION_NAME"]
+		notif = cfg["DEFAULT_NOTIFICATION"]
 	}
 
 	if category == "" {
-		category = "Unknown"
+		category = defaultCategory
 	}
 
 	if notif == "" {
-		notif = "Time has been finalized"
+		notif = defaultNotif
 	}
 
 	return ArgsCli{
@@ -151,3 +138,25 @@ func parseArgs() ArgsCli {
 		unlimited:   unlimited,
 	}
 }
+
+func validateArgs(args *ArgsCli, cfg map[string]string) error {
+	if args.time == "" && !args.unlimited {
+		return fmt.Errorf("\nERROR: Time argument is required")
+	}
+
+	if args.category == "" {
+		return fmt.Errorf("\nERROR: Category is required")
+	}
+
+	if args.useDatabase {
+		if args.connString == "" && cfg["CONN"] == "" {
+			return fmt.Errorf("Database enabled but no connection string provided")
+		}
+		if args.connString == "" {
+			args.connString = cfg["CONN"]
+		}
+	}
+
+	return nil
+}
+
