@@ -5,6 +5,8 @@ import (
 	"os"
 	"testing"
 	"time"
+	"sync"
+	"fmt"
 )
 
 func TestNewLogger(t *testing.T) {
@@ -139,23 +141,43 @@ func TestConcurrentLogging(t *testing.T) {
 	}
 
 	const numGoroutines = 10
+	var wg sync.WaitGroup
 	errCh := make(chan error, numGoroutines)
 
+	// Start goroutines
 	for i := range numGoroutines {
+		wg.Add(1)
 		go func(i int) {
+			defer wg.Done()
 			entry := &LogEntry{
 				InitTime:    time.Now().UnixMilli(),
 				EndTime:     time.Now().Add(time.Second).UnixMilli(),
-				Category:    "concurrent",
+				Category:    fmt.Sprintf("concurrent-%d", i),
 				Description: "test concurrent logging",
 			}
-			errCh <- logger.Log(entry)
+			if err := logger.Log(entry); err != nil {
+				errCh <- fmt.Errorf("goroutine %d: %w", i, err)
+			}
 		}(i)
 	}
 
-	for range numGoroutines {
-		if err := <-errCh; err != nil {
-			t.Errorf("concurrent logging failed: %v", err)
-		}
+	// Wait for completion with timeout
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Success case
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout waiting for concurrent operations")
+	}
+
+	// Check for any errors
+	close(errCh)
+	for err := range errCh {
+		t.Errorf("concurrent logging error: %v", err)
 	}
 }

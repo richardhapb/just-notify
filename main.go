@@ -50,7 +50,6 @@ func main() {
 	}
 
 	var millis int64
-
 	if !args.unlimited {
 		var err error
 		millis, err = commands.GetTime(args.time)
@@ -60,51 +59,81 @@ func main() {
 		fmt.Printf("Alert scheduled for %s\n", args.time)
 	}
 
+	_, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Handle shutdown signals
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT)
+
+	// Create error channel for goroutine errors
+	errChan := make(chan error, 1)
+
 	app.wg.Add(1)
+	go func() {
+		defer app.wg.Done()
+		notification.Schedule(!args.unlimited, app.closeSignal, millis, func(now, epochMillis int64) {
+			notification.Notify(args.notif, fmt.Sprintf("Time completed: %s", args.category))
 
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
-	defer stop()
+			var logger database.Logger
+			var err error
+			if args.useDatabase {
+				logger, err = database.NewLogger(args.connString, true)
+			} else {
+				logger, err = database.NewLogger(app.cfg["CSV_PATH"], false)
+			}
 
-	go notification.Schedule(!args.unlimited, app.closeSignal, millis, func(now, epochMillis int64) {
-		notification.Notify(args.notif, fmt.Sprintf("Time completed: %s", args.category))
+			if err != nil {
+				errChan <- fmt.Errorf("failed to create logger: %w", err)
+				return
+			}
+			defer logger.Close()
 
-		var logger database.Logger
-		var err error
-		if args.useDatabase {
-			logger, err = database.NewLogger(args.connString, true)
-		} else {
-			logger, err = database.NewLogger(app.cfg["CSV_PATH"], false)
-		}
+			if err := logger.Log(&database.LogEntry{
+				InitTime:    now,
+				EndTime:     epochMillis,
+				Category:    args.category,
+				Description: args.description,
+			}); err != nil {
+				errChan <- fmt.Errorf("failed to log entry: %w", err)
+				return
+			}
+		})
+	}()
 
-		if err != nil {
-			log.Fatal(err.Error())
-		}
-		defer logger.Close()
-
-		if err := logger.Log(&database.LogEntry{
-			InitTime:    now,
-			EndTime:     epochMillis,
-			Category:    args.category,
-			Description: args.description,
-		}); err != nil {
-			fmt.Fprintf(os.Stderr, "error inserting data in database: %s", err)
-			os.Exit(1)
-		}
-		app.wg.Done()
-	})
+	// Wait with timeout for goroutines to finish
+	done := make(chan struct{})
+	go func() {
+		app.wg.Wait()
+		close(done)
+	}()
 
 	go func() {
+		// Wait for either signal or error
 		startTime := time.Now()
 		select {
-		case <-ctx.Done():
-			app.closeSignal <- true
-			elapsed := time.Since(startTime)
-			time.Sleep(time.Duration(100) * time.Millisecond)
-			fmt.Printf("\n\nTime elapsed: %.2f minutes\n", elapsed.Minutes())
+		case sig := <-sigChan:
+			log.Printf("\nReceived signal: %v", sig)
+			cancel()
+
+			// Send close signal with timeout
+			select {
+			case app.closeSignal <- true:
+				elapsed := time.Since(startTime)
+				log.Printf("Time elapsed: %.2f minutes", elapsed.Minutes())
+			case <-time.After(3 * time.Second):
+				log.Printf("Warning: Failed to send close signal (timeout)")
+			}
+		case err := <-errChan:
+			log.Printf("Error during execution: %v", err)
+			cancel()
 		}
 	}()
 
-	app.wg.Wait()
+	select {
+	case <-done:
+		log.Println("Shutdown successfully")
+	}
 }
 
 func parseArgs(cfg map[string]string) ArgsCli {

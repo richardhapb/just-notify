@@ -35,32 +35,31 @@ func Schedule(enableProgressBar bool, closeSignal chan bool, epochMillis int64, 
 	if enableProgressBar {
 		ui.ProgressBar(closeSignal, now, epochMillis)
 	} else {
-		exit := false
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+
 		for {
-			ticker := time.NewTicker(time.Second)
-			defer ticker.Stop()
+			select {
+			case <-closeSignal:
+				action(now, time.Now().UnixMilli())
+				return
+			case t := <-ticker.C:
+				elapsed := time.Since(time.UnixMilli(now)).Round(time.Second)
+				hours := int(elapsed.Hours())
+				minutes := int(elapsed.Minutes()) % 60
+				seconds := int(elapsed.Seconds()) % 60
+				fmt.Printf("\rTime elapsed: %02d:%02d:%02d", hours, minutes, seconds)
 
-			for {
-				select {
-				case <-closeSignal:
-					exit = true
-				case <-ticker.C:
-					elapsed := time.Since(time.UnixMilli(now)).Round(time.Second)
-					hours := int(elapsed.Hours())
-					minutes := int(elapsed.Minutes()) % 60
-					seconds := int(elapsed.Seconds()) % 60
-					fmt.Printf("\rTime elapsed: %02d:%02d:%02d", hours, minutes, seconds)
+				if epochMillis != 0 && t.UnixMilli() >= epochMillis {
+					action(now, t.UnixMilli())
+					return
 				}
-				if exit {
-					break
-				}
-
-			}
-			if exit {
-				break
 			}
 		}
 	}
 
-	action(now, epochMillis)
+	// Handle scheduled execution when progress bar is enabled
+	if enableProgressBar {
+		action(now, time.Now().UnixMilli())
+	}
 }
