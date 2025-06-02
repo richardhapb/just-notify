@@ -22,18 +22,17 @@ func Notify(title, message string) error {
 func Schedule(enableProgressBar bool, closeSignal chan bool, epochMillis int64, action func(int64, int64)) {
 	now := time.Now().UnixMilli()
 
-	if epochMillis != 0 {
-		delayMillis := epochMillis - now
-		if delayMillis < 0 {
-			fmt.Println("epochMillis is in the past in schedule function")
-			return
-		}
-
-		fmt.Printf("Scheduling task to %d seconds later\n", delayMillis/1000)
+	if epochMillis != 0 && epochMillis < now {
+		fmt.Println("Warning: Target time is in the past")
+		return
 	}
 
+	// Calculate total duration
+	duration := time.Duration(epochMillis-now) * time.Millisecond
+	fmt.Printf("Scheduling task for %v from now\n", duration.Round(time.Second))
+
 	if enableProgressBar {
-		ui.ProgressBar(closeSignal, now, epochMillis)
+		go ui.ProgressBar(closeSignal, now, epochMillis)
 	} else {
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
@@ -44,22 +43,25 @@ func Schedule(enableProgressBar bool, closeSignal chan bool, epochMillis int64, 
 				action(now, time.Now().UnixMilli())
 				return
 			case t := <-ticker.C:
+				current := t.UnixMilli()
 				elapsed := time.Since(time.UnixMilli(now)).Round(time.Second)
 				hours := int(elapsed.Hours())
 				minutes := int(elapsed.Minutes()) % 60
 				seconds := int(elapsed.Seconds()) % 60
 				fmt.Printf("\rTime elapsed: %02d:%02d:%02d", hours, minutes, seconds)
 
-				if epochMillis != 0 && t.UnixMilli() >= epochMillis {
-					action(now, t.UnixMilli())
+				if epochMillis != 0 && current >= epochMillis {
+					fmt.Println() // Add newline before exiting
+					action(now, current)
 					return
 				}
 			}
 		}
 	}
 
-	// Handle scheduled execution when progress bar is enabled
+	// For progress bar mode, wait for completion before running action
 	if enableProgressBar {
+		time.Sleep(duration)
 		action(now, time.Now().UnixMilli())
 	}
 }
