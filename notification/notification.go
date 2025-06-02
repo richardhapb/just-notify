@@ -27,10 +27,6 @@ func Schedule(enableProgressBar bool, closeSignal chan bool, epochMillis int64, 
 		return
 	}
 
-	// Calculate total duration
-	duration := time.Duration(epochMillis-now) * time.Millisecond
-	fmt.Printf("Scheduling task for %v from now\n", duration.Round(time.Second))
-
 	if enableProgressBar {
 		doneChan := make(chan struct{})
 		go func() {

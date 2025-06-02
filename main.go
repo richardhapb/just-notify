@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"just-notify/commands"
@@ -59,9 +58,6 @@ func main() {
 		fmt.Printf("Alert scheduled for %s\n", args.time)
 	}
 
-	_, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	// Handle shutdown signals
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT)
@@ -98,6 +94,8 @@ func main() {
 				errChan <- fmt.Errorf("failed to log entry: %w", err)
 				return
 			}
+
+			log.Println("Entry logged successfully.")
 		})
 	}()
 
@@ -114,7 +112,6 @@ func main() {
 		select {
 		case sig := <-sigChan:
 			log.Printf("\nReceived signal: %v", sig)
-			cancel()
 
 			// Send close signal with timeout
 			select {
@@ -126,7 +123,6 @@ func main() {
 			}
 		case err := <-errChan:
 			log.Printf("Error during execution: %v", err)
-			cancel()
 		}
 	}()
 
