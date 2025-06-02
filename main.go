@@ -67,12 +67,26 @@ func main() {
 
 	go notification.Schedule(!args.unlimited, app.closeSignal, millis, func(now, epochMillis int64) {
 		notification.Notify(args.notif, fmt.Sprintf("Time completed: %s", args.category))
-		if err := database.LogData(database.LogEntry{
+
+		var logger database.Logger
+		var err error
+		if args.useDatabase {
+			logger, err = database.NewLogger(args.connString, true)
+		} else {
+			logger, err = database.NewLogger(app.cfg["CSV_PATH"], false)
+		}
+
+		if err != nil {
+			log.Fatal(err.Error())
+		}
+		defer logger.Close()
+
+		if err := logger.Log(&database.LogEntry{
 			InitTime:    now,
 			EndTime:     epochMillis,
 			Category:    args.category,
 			Description: args.description,
-		}, args.useDatabase, args.connString); err != nil {
+		}); err != nil {
 			fmt.Fprintf(os.Stderr, "error inserting data in database: %s", err)
 			os.Exit(1)
 		}
@@ -158,4 +172,3 @@ func validateArgs(args *ArgsCli, cfg map[string]string) error {
 
 	return nil
 }
-

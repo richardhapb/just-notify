@@ -1,13 +1,9 @@
 package database
 
-import (
-	"encoding/csv"
-	"fmt"
-	"just-notify/config"
-	"os"
-	"path/filepath"
-	"strconv"
-)
+type Logger interface {
+	Log(*LogEntry) error
+	Close() error
+}
 
 type LogEntry struct {
 	InitTime    int64
@@ -16,71 +12,34 @@ type LogEntry struct {
 	Description string
 }
 
-func LogData(data LogEntry, useDatabase bool, connString ...string) error {
-
-	var connStr string
-	if len(connString) > 0 {
-		connStr = connString[0]
+func NewLogger(conn string, database bool) (Logger, error) {
+	if database {
+		return openDB(conn)
 	}
 
-	config := config.LoadConfig()
-
-	filePath := config["CSV_PATH"]
-
-	// Default path
-	if !useDatabase && filePath == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return err
-		}
-		filePath = filepath.Join(home, ".jn.csv")
-	}
-
-	if connStr != "" && useDatabase {
-		conn, err := OpenDB(connStr)
-
-		if err != nil {
-			return err
-		}
-
-		defer conn.Close()
-
-		if err := conn.InitSchema(); err != nil {
-			return err
-		}
-
-		if err := conn.Insert(&data); err != nil {
-			return err
-		}
-
-		return nil
-	}
-
-	// Check if file exists to determine if headers are needed
-	needsHeader := !fileExists(filePath)
-
-	file, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
-
-	// Write headers if new file
-	if needsHeader {
-		headers := []string{"init_time_ms", "end_time_ms", "category", "description"}
-		if err := writer.Write(headers); err != nil {
-			return fmt.Errorf("error writing headers: %w", err)
-		}
-	}
-
-	// Write the actual data
-	return writer.WriteAll([][]string{{strconv.Itoa(int(data.InitTime)), strconv.Itoa(int(data.EndTime)), data.Category, data.Description}})
+	return NewCSV(conn)
 }
 
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return !os.IsNotExist(err)
+func Log(logger Logger, entry *LogEntry) error {
+	return logger.Log(entry)
+}
+
+func (h *PgHandler) Log(entry *LogEntry) error {
+	if err := h.Insert(entry); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (h *SqliteHandler) Log(entry *LogEntry) error {
+	if err := h.Insert(entry); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (l *CSV) Log(entry *LogEntry) error {
+	return l.Write(entry)
 }
