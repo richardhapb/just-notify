@@ -32,36 +32,37 @@ func Schedule(enableProgressBar bool, closeSignal chan bool, epochMillis int64, 
 	fmt.Printf("Scheduling task for %v from now\n", duration.Round(time.Second))
 
 	if enableProgressBar {
-		go ui.ProgressBar(closeSignal, now, epochMillis)
-	} else {
-		ticker := time.NewTicker(time.Second)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-closeSignal:
-				action(now, time.Now().UnixMilli())
-				return
-			case t := <-ticker.C:
-				current := t.UnixMilli()
-				elapsed := time.Since(time.UnixMilli(now)).Round(time.Second)
-				hours := int(elapsed.Hours())
-				minutes := int(elapsed.Minutes()) % 60
-				seconds := int(elapsed.Seconds()) % 60
-				fmt.Printf("\rTime elapsed: %02d:%02d:%02d", hours, minutes, seconds)
-
-				if epochMillis != 0 && current >= epochMillis {
-					fmt.Println() // Add newline before exiting
-					action(now, current)
-					return
-				}
-			}
-		}
+		doneChan := make(chan struct{})
+		go func() {
+			ui.ProgressBar(closeSignal, now, epochMillis)
+			close(doneChan)
+		}()
+		<-doneChan
+		action(now, time.Now().UnixMilli())
+		return
 	}
 
-	// For progress bar mode, wait for completion before running action
-	if enableProgressBar {
-		time.Sleep(duration)
-		action(now, time.Now().UnixMilli())
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-closeSignal:
+			action(now, time.Now().UnixMilli())
+			return
+		case t := <-ticker.C:
+			current := t.UnixMilli()
+			elapsed := time.Since(time.UnixMilli(now)).Round(time.Second)
+			hours := int(elapsed.Hours())
+			minutes := int(elapsed.Minutes()) % 60
+			seconds := int(elapsed.Seconds()) % 60
+			fmt.Printf("\rTime elapsed: %02d:%02d:%02d", hours, minutes, seconds)
+
+			if epochMillis != 0 && current >= epochMillis {
+				fmt.Println() // Add newline before exiting
+				action(now, current)
+				return
+			}
+		}
 	}
 }
