@@ -14,6 +14,7 @@ func buildCliArgs() ArgsCli {
 		useDatabase: false,
 		connString:  "",
 		unlimited:   false,
+		headless:    true,
 	}
 
 }
@@ -61,6 +62,8 @@ func TestParseArgs(t *testing.T) {
 		"CONN":                 "testing-conn",
 		"DEFAULT_CATEGORY":     "testing-category",
 		"DEFAULT_NOTIFICATION": "testing-notification",
+		"USE_DATABASE":         "true",
+		"HEADLESS":             "true",
 	}
 
 	expectedTime := "1h"
@@ -80,4 +83,11 @@ func TestParseArgs(t *testing.T) {
 		t.Fatalf("Notification expected: %s, received %s", cfg["DEFAULT_NOTIFICATION"], parsedArgs.notif)
 	}
 
+	if !parsedArgs.useDatabase {
+		t.Fatalf("Use database expected: %v, received %v", true, parsedArgs.useDatabase)
+	}
+
+	if !parsedArgs.headless {
+		t.Fatalf("Headless expected: %v, received %v", true, parsedArgs.headless)
+	}
 }

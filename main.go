@@ -23,6 +23,7 @@ type ArgsCli struct {
 	useDatabase bool
 	connString  string
 	unlimited   bool
+	headless    bool
 }
 
 type app struct {
@@ -69,7 +70,9 @@ func main() {
 	go func() {
 		defer app.wg.Done()
 		notification.Schedule(!args.unlimited, app.closeSignal, millis, func(now, epochMillis int64) {
-			notification.Notify(args.notif, fmt.Sprintf("Time completed: %s", args.category))
+			if !args.headless {
+				notification.Notify(args.notif, fmt.Sprintf("Time completed: %s", args.category))
+			}
 
 			var logger database.Logger
 			var err error
@@ -140,6 +143,7 @@ func parseArgs(cfg map[string]string) ArgsCli {
 	var useDatabase bool
 	var connString string
 	var unlimited bool
+	var headless bool
 
 	flag.StringVar(&rawTime, "t", "", "Time scheduled for the notification (e.g. <mm>m = Time and suffix \"m\" for minutes, or <hh:mm>Hour:minute")
 	flag.StringVar(&category, "c", "", "Category: The category of the task to be executed during focus time. e.g. work.")
@@ -148,6 +152,7 @@ func parseArgs(cfg map[string]string) ArgsCli {
 	flag.StringVar(&connString, "s", "", "Connection string used to connect to the database; it only works if the database flag is enabled.")
 	flag.StringVar(&description, "l", "", "Optional: Details of the task")
 	flag.BoolVar(&unlimited, "u", false, "Unlimited time")
+	flag.BoolVar(&headless, "H", false, "Headless, disable notifications")
 	flag.Parse()
 
 	if category == "" {
@@ -156,6 +161,14 @@ func parseArgs(cfg map[string]string) ArgsCli {
 
 	if notif == "" {
 		notif = cfg["DEFAULT_NOTIFICATION"]
+	}
+
+	if !useDatabase {
+		useDatabase = cfg["USE_DATABASE"] == "true"
+	}
+
+	if !headless {
+		headless = cfg["HEADLESS"] == "true"
 	}
 
 	if category == "" {
@@ -174,6 +187,7 @@ func parseArgs(cfg map[string]string) ArgsCli {
 		useDatabase: useDatabase,
 		connString:  connString,
 		unlimited:   unlimited,
+		headless:    headless,
 	}
 }
 
