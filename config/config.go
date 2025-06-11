@@ -1,11 +1,11 @@
 package config
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"flag"
 )
 
 type ArgsCli struct {
@@ -18,6 +18,7 @@ type ArgsCli struct {
 	Unlimited   bool
 	Headless    bool
 	CsvPath     string
+	Kill        bool
 }
 
 const (
@@ -70,6 +71,7 @@ func ParseArgs(cfg map[string]string) ArgsCli {
 	var unlimited bool
 	var headless bool
 	var csvPath string
+	var kill bool
 
 	flag.StringVar(&rawTime, "t", "", "Time scheduled for the notification (e.g. <mm>m = Time and suffix \"m\" for minutes, or <hh:mm>Hour:minute")
 	flag.StringVar(&category, "c", "", "Category: The category of the task to be executed during focus time. e.g. work.")
@@ -77,6 +79,7 @@ func ParseArgs(cfg map[string]string) ArgsCli {
 	flag.BoolVar(&useDatabase, "d", false, "Indicate whether a SQL database will be used")
 	flag.StringVar(&connString, "s", "", "Connection string used to connect to the database; it only works if the database flag is enabled.")
 	flag.StringVar(&description, "l", "", "Optional: Details of the task")
+	flag.BoolVar(&kill, "k", false, "Kill a task, an category should be passed")
 	flag.StringVar(&csvPath, "C", "", "CSV path; this will be ignored if the database is enabled, but can be used as a fallback.")
 	flag.BoolVar(&unlimited, "u", false, "Unlimited time")
 	flag.BoolVar(&headless, "H", false, "Headless, disable notifications")
@@ -120,15 +123,19 @@ func ParseArgs(cfg map[string]string) ArgsCli {
 		Unlimited:   unlimited,
 		Headless:    headless,
 		CsvPath:     csvPath,
+		Kill:        kill,
 	}
 }
 
 func ValidateArgs(args *ArgsCli, cfg map[string]string) error {
-	if args.Time == "" && !args.Unlimited {
+	if !args.Kill && args.Time == "" && !args.Unlimited {
 		return fmt.Errorf("\nERROR: Time argument is required")
 	}
 
 	if args.Category == "" {
+		if args.Kill {
+			return fmt.Errorf("\nERROR: A category is required to terminate the process")
+		}
 		return fmt.Errorf("\nERROR: Category is required")
 	}
 

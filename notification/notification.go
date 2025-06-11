@@ -19,9 +19,7 @@ func Notify(title, message string) error {
 	}
 }
 
-func Schedule(enableProgressBar bool, closeSignal chan bool, epochMillis int64, action func(int64, int64)) {
-	now := time.Now().UnixMilli()
-
+func Schedule(enableProgressBar bool, closeSignal chan bool, now, epochMillis int64, action func(int64, int64)) {
 	if epochMillis != 0 && epochMillis < now {
 		fmt.Println("Warning: Target time is in the past")
 		return

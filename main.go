@@ -22,15 +22,30 @@ type app struct {
 }
 
 func main() {
+
 	app := &app{
 		closeSignal: make(chan bool, 1),
 		cfg:         config.LoadConfig(),
 	}
 
 	args := config.ParseArgs(app.cfg)
+
 	if err := config.ValidateArgs(&args, app.cfg); err != nil {
 		flag.PrintDefaults()
 		log.Fatalln(err)
+	}
+
+	if args.Kill {
+		pid, err := commands.KillProcess(args.Category)
+		if err != nil {
+			log.Fatalf("Error terminating the process: %s\n", err)
+		}
+
+		log.Printf("Process %d terminated sucessfully\n", pid)
+		os.Exit(0)
+	} else {
+		// Create the pid file
+		commands.StorePID(args.Category)
 	}
 
 	var millis int64
@@ -62,7 +77,7 @@ func main() {
 			logger, err = database.NewLogger(args.CsvPath, false)
 		}
 
-		currentTime := time.Now().Unix()
+		currentTime := time.Now().UnixMilli()
 
 		exists, err := logger.Exists(&database.LogEntry{
 			InitTime: currentTime,
@@ -88,7 +103,7 @@ func main() {
 			return
 		}
 
-		notification.Schedule(!args.Unlimited, app.closeSignal, millis, func(now, epochMillis int64) {
+		notification.Schedule(!args.Unlimited, app.closeSignal, currentTime, millis, func(now, epochMillis int64) {
 			if !args.Headless {
 				notification.Notify(args.Notif, fmt.Sprintf("Time completed: %s", args.Category))
 			}
