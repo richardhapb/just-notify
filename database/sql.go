@@ -5,7 +5,6 @@ import (
 	"fmt"
 	_ "github.com/lib/pq"
 	_ "github.com/mattn/go-sqlite3"
-	"os"
 	"strings"
 )
 
@@ -15,6 +14,8 @@ type dbHandler struct {
 
 type DB interface {
 	Insert(*LogEntry) error
+	Exists(*LogEntry)(bool, error) 
+	IsFinished(*LogEntry)(bool, error) 
 	initSchema() error
 	Close() error
 	Logger
@@ -62,28 +63,17 @@ func openDB(dsn string) (DB, error) {
 	return db, db.initSchema()
 }
 
+////// POSTGRES ///////
+
 func (l *PgHandler) initSchema() error {
 	schema := `
 	CREATE TABLE IF NOT EXISTS logs (
 		id SERIAL PRIMARY KEY,
 		init_time_ms BIGINT NOT NULL,
-		end_time_ms BIGINT NOT NULL,
+		end_time_ms BIGINT,
 		category TEXT NOT NULL,
-		description TEXT
-	);`
-
-	_, err := l.db.Exec(schema)
-	return err
-}
-
-func (l *SqliteHandler) initSchema() error {
-	schema := `
-	CREATE TABLE IF NOT EXISTS logs (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		init_time_ms BIGINT NOT NULL,
-		end_time_ms BIGINT NOT NULL,
-		category TEXT NOT NULL,
-		description TEXT
+		description TEXT,
+	    constraint unique_task unique (init_time_ms, category)
 	);`
 
 	_, err := l.db.Exec(schema)
@@ -92,24 +82,103 @@ func (l *SqliteHandler) initSchema() error {
 
 func (l *PgHandler) Insert(data *LogEntry) error {
 	stmt := `
-			INSERT INTO logs (init_time_ms, end_time_ms, category, description)
-			VALUES ($1, $2, $3, $4)`
+	INSERT INTO logs (init_time_ms, end_time_ms, category, description)
+	VALUES ($1, $2, $3, $4)
+	ON CONFLICT ON CONSTRAINT unique_task 
+	DO UPDATE SET end_time_ms = EXCLUDED.end_time_ms`
 
 	_, err := l.db.Exec(stmt, data.InitTime, data.EndTime, data.Category, data.Description)
+	return err
+}
+
+func (l *PgHandler) Exists(entry *LogEntry) (bool, error) {
+	query := `
+	SELECT EXISTS (
+		SELECT 1 FROM logs
+		WHERE init_time_ms = $1 AND category = $2
+	)`
+
+	var exists bool
+	err := l.db.QueryRow(query, entry.InitTime, entry.Category).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("checking existence: %w", err)
+	}
+	return exists, nil
+}
+
+func (l *PgHandler) IsFinished(entry *LogEntry) (bool, error) {
+	query := `
+	SELECT COALESCE(end_time_ms <> 0, false)
+	FROM logs
+	WHERE init_time_ms = $1 AND category = $2`
+
+	var finished bool
+	err := l.db.QueryRow(query, entry.InitTime, entry.Category).Scan(&finished)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("checking finished status: %w", err)
+	}
+	return finished, nil
+}
+
+////// SQLITE ///////
+
+func (l *SqliteHandler) initSchema() error {
+	schema := `
+	CREATE TABLE IF NOT EXISTS logs (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		init_time_ms BIGINT NOT NULL,
+		end_time_ms BIGINT,
+		category TEXT NOT NULL,
+		description TEXT
+	);
+	CREATE UNIQUE INDEX IF NOT EXISTS unique_task ON logs(init_time_ms, category);`
+
+	_, err := l.db.Exec(schema)
 	return err
 }
 
 func (l *SqliteHandler) Insert(data *LogEntry) error {
 	stmt := `
-	INSERT INTO logs (init_time_ms, end_time_ms, category, description)
-	VALUES (?, ?, ?, ?)`
+	INSERT OR REPLACE INTO logs (init_time_ms, end_time_ms, category, description)
+	VALUES (?, ?, ?, ?)` 
 
 	_, err := l.db.Exec(stmt, data.InitTime, data.EndTime, data.Category, data.Description)
 	return err
 }
 
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return !os.IsNotExist(err)
+func (l *SqliteHandler) Exists(entry *LogEntry) (bool, error) {
+	query := `
+	SELECT EXISTS (
+		SELECT 1 FROM logs
+		WHERE init_time_ms = ? AND category = ?
+	)`
+
+	var exists bool
+	err := l.db.QueryRow(query, entry.InitTime, entry.Category).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("checking existence: %w", err)
+	}
+	return exists, nil
 }
+
+func (l *SqliteHandler) IsFinished(entry *LogEntry) (bool, error) {
+	query := `
+	SELECT COALESCE(end_time_ms <> 0, false)
+	FROM logs
+	WHERE init_time_ms = ? AND category = ?`
+
+	var finished bool
+	err := l.db.QueryRow(query, entry.InitTime, entry.Category).Scan(&finished)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("checking finished status: %w", err)
+	}
+	return finished, nil
+}
+
 

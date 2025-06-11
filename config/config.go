@@ -1,10 +1,28 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
-	"fmt"
 	"strings"
+	"flag"
+)
+
+type ArgsCli struct {
+	Time        string
+	Notif       string
+	Category    string
+	Description string
+	UseDatabase bool
+	ConnString  string
+	Unlimited   bool
+	Headless    bool
+	CsvPath     string
+}
+
+const (
+	defaultCategory = "Unknown"
+	defaultNotif    = "Time has been finalized"
 )
 
 func LoadConfig() map[string]string {
@@ -42,3 +60,86 @@ func LoadConfig() map[string]string {
 	return config
 }
 
+func ParseArgs(cfg map[string]string) ArgsCli {
+	var rawTime string
+	var notif string
+	var category string
+	var description string
+	var useDatabase bool
+	var connString string
+	var unlimited bool
+	var headless bool
+	var csvPath string
+
+	flag.StringVar(&rawTime, "t", "", "Time scheduled for the notification (e.g. <mm>m = Time and suffix \"m\" for minutes, or <hh:mm>Hour:minute")
+	flag.StringVar(&category, "c", "", "Category: The category of the task to be executed during focus time. e.g. work.")
+	flag.StringVar(&notif, "n", "", "Notification title: The title for the notification to be shown")
+	flag.BoolVar(&useDatabase, "d", false, "Indicate whether a SQL database will be used")
+	flag.StringVar(&connString, "s", "", "Connection string used to connect to the database; it only works if the database flag is enabled.")
+	flag.StringVar(&description, "l", "", "Optional: Details of the task")
+	flag.StringVar(&csvPath, "C", "", "CSV path; this will be ignored if the database is enabled, but can be used as a fallback.")
+	flag.BoolVar(&unlimited, "u", false, "Unlimited time")
+	flag.BoolVar(&headless, "H", false, "Headless, disable notifications")
+	flag.Parse()
+
+	if category == "" {
+		category = cfg["DEFAULT_CATEGORY"]
+	}
+
+	if csvPath == "" {
+		csvPath = cfg["CSV_PATH"]
+	}
+
+	if notif == "" {
+		notif = cfg["DEFAULT_NOTIFICATION"]
+	}
+
+	if !useDatabase {
+		useDatabase = cfg["USE_DATABASE"] == "true"
+	}
+
+	if !headless {
+		headless = cfg["HEADLESS"] == "true"
+	}
+
+	if category == "" {
+		category = defaultCategory
+	}
+
+	if notif == "" {
+		notif = defaultNotif
+	}
+
+	return ArgsCli{
+		Time:        rawTime,
+		Notif:       notif,
+		Category:    category,
+		Description: description,
+		UseDatabase: useDatabase,
+		ConnString:  connString,
+		Unlimited:   unlimited,
+		Headless:    headless,
+		CsvPath:     csvPath,
+	}
+}
+
+func ValidateArgs(args *ArgsCli, cfg map[string]string) error {
+	if args.Time == "" && !args.Unlimited {
+		return fmt.Errorf("\nERROR: Time argument is required")
+	}
+
+	if args.Category == "" {
+		return fmt.Errorf("\nERROR: Category is required")
+	}
+
+	if args.UseDatabase {
+		if args.ConnString == "" && cfg["CONN"] == "" {
+			return fmt.Errorf("Database enabled but no connection string provided")
+		}
+		if args.ConnString == "" {
+			args.ConnString = cfg["CONN"]
+		}
+	}
+
+	return nil
+}

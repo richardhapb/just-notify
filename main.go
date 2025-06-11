@@ -15,27 +15,11 @@ import (
 	"time"
 )
 
-type ArgsCli struct {
-	time        string
-	notif       string
-	category    string
-	description string
-	useDatabase bool
-	connString  string
-	unlimited   bool
-	headless    bool
-}
-
 type app struct {
 	wg          sync.WaitGroup
 	closeSignal chan bool
 	cfg         map[string]string
 }
-
-const (
-	defaultCategory = "Unknown"
-	defaultNotif    = "Time has been finalized"
-)
 
 func main() {
 	app := &app{
@@ -43,20 +27,20 @@ func main() {
 		cfg:         config.LoadConfig(),
 	}
 
-	args := parseArgs(app.cfg)
-	if err := validateArgs(&args, app.cfg); err != nil {
+	args := config.ParseArgs(app.cfg)
+	if err := config.ValidateArgs(&args, app.cfg); err != nil {
 		flag.PrintDefaults()
 		log.Fatalln(err)
 	}
 
 	var millis int64
-	if !args.unlimited {
+	if !args.Unlimited {
 		var err error
-		millis, err = commands.GetTime(args.time)
+		millis, err = commands.GetTime(args.Time)
 		if err != nil {
 			log.Fatalf("Error scheduling task: %v", err)
 		}
-		fmt.Printf("Alert scheduled for %s\n", args.time)
+		fmt.Printf("Alert scheduled for %s\n", args.Time)
 	}
 
 	// Handle shutdown signals
@@ -69,17 +53,44 @@ func main() {
 	app.wg.Add(1)
 	go func() {
 		defer app.wg.Done()
-		notification.Schedule(!args.unlimited, app.closeSignal, millis, func(now, epochMillis int64) {
-			if !args.headless {
-				notification.Notify(args.notif, fmt.Sprintf("Time completed: %s", args.category))
-			}
 
-			var logger database.Logger
-			var err error
-			if args.useDatabase {
-				logger, err = database.NewLogger(args.connString, true)
-			} else {
-				logger, err = database.NewLogger(app.cfg["CSV_PATH"], false)
+		var logger database.Logger
+		var err error
+		if args.UseDatabase {
+			logger, err = database.NewLogger(args.ConnString, true)
+		} else {
+			logger, err = database.NewLogger(args.CsvPath, false)
+		}
+
+		currentTime := time.Now().Unix()
+
+		exists, err := logger.Exists(&database.LogEntry{
+			InitTime: currentTime,
+			Category: args.Category,
+		})
+
+		if exists {
+			log.Fatalf("The task with time %d and category %s already exists", currentTime, args.Category)
+		}
+
+		if err != nil {
+			log.Fatalf("Error checking task: %s", err)
+		}
+
+		// Initialize the data before scheduling the task; this allows tracking if any
+		// tasks exist and prevents data loss when the task is not finalized gracefully.
+		if err := logger.Log(&database.LogEntry{
+			InitTime:    currentTime,
+			Category:    args.Category,
+			Description: args.Description,
+		}); err != nil {
+			errChan <- fmt.Errorf("failed to log initial entry: %w", err)
+			return
+		}
+
+		notification.Schedule(!args.Unlimited, app.closeSignal, millis, func(now, epochMillis int64) {
+			if !args.Headless {
+				notification.Notify(args.Notif, fmt.Sprintf("Time completed: %s", args.Category))
 			}
 
 			if err != nil {
@@ -91,8 +102,8 @@ func main() {
 			if err := logger.Log(&database.LogEntry{
 				InitTime:    now,
 				EndTime:     epochMillis,
-				Category:    args.category,
-				Description: args.description,
+				Category:    args.Category,
+				Description: args.Description,
 			}); err != nil {
 				errChan <- fmt.Errorf("failed to log entry: %w", err)
 				return
@@ -135,79 +146,3 @@ func main() {
 	}
 }
 
-func parseArgs(cfg map[string]string) ArgsCli {
-	var rawTime string
-	var notif string
-	var category string
-	var description string
-	var useDatabase bool
-	var connString string
-	var unlimited bool
-	var headless bool
-
-	flag.StringVar(&rawTime, "t", "", "Time scheduled for the notification (e.g. <mm>m = Time and suffix \"m\" for minutes, or <hh:mm>Hour:minute")
-	flag.StringVar(&category, "c", "", "Category: The category of the task to be executed during focus time. e.g. work.")
-	flag.StringVar(&notif, "n", "", "Notification title: The title for the notification to be shown")
-	flag.BoolVar(&useDatabase, "d", false, "Indicate whether a SQL database will be used")
-	flag.StringVar(&connString, "s", "", "Connection string used to connect to the database; it only works if the database flag is enabled.")
-	flag.StringVar(&description, "l", "", "Optional: Details of the task")
-	flag.BoolVar(&unlimited, "u", false, "Unlimited time")
-	flag.BoolVar(&headless, "H", false, "Headless, disable notifications")
-	flag.Parse()
-
-	if category == "" {
-		category = cfg["DEFAULT_CATEGORY"]
-	}
-
-	if notif == "" {
-		notif = cfg["DEFAULT_NOTIFICATION"]
-	}
-
-	if !useDatabase {
-		useDatabase = cfg["USE_DATABASE"] == "true"
-	}
-
-	if !headless {
-		headless = cfg["HEADLESS"] == "true"
-	}
-
-	if category == "" {
-		category = defaultCategory
-	}
-
-	if notif == "" {
-		notif = defaultNotif
-	}
-
-	return ArgsCli{
-		time:        rawTime,
-		notif:       notif,
-		category:    category,
-		description: description,
-		useDatabase: useDatabase,
-		connString:  connString,
-		unlimited:   unlimited,
-		headless:    headless,
-	}
-}
-
-func validateArgs(args *ArgsCli, cfg map[string]string) error {
-	if args.time == "" && !args.unlimited {
-		return fmt.Errorf("\nERROR: Time argument is required")
-	}
-
-	if args.category == "" {
-		return fmt.Errorf("\nERROR: Category is required")
-	}
-
-	if args.useDatabase {
-		if args.connString == "" && cfg["CONN"] == "" {
-			return fmt.Errorf("Database enabled but no connection string provided")
-		}
-		if args.connString == "" {
-			args.connString = cfg["CONN"]
-		}
-	}
-
-	return nil
-}
