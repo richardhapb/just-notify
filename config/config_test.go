@@ -69,7 +69,11 @@ func TestParseArgs(t *testing.T) {
 	expectedTime := "1h"
 	os.Args[1] = "-t"
 	os.Args[2] = expectedTime
-	parsedArgs := ParseArgs(cfg)
+	parsedArgs, err := ParseArgs(cfg)
+
+	if err != nil {
+		t.Fatalf("Error parsing arguments: %s", err)
+	}
 
 	if parsedArgs.Time != expectedTime {
 		t.Fatalf("Time expected: %s, received %s", expectedTime, parsedArgs.Time)

@@ -1,3 +1,5 @@
+github.com/fred1268/go-clap v1.2.1 h1:wi8Tokb2zmOEuwwTTfKX5Sj1h6ZpT2BxRtx1/ZJsol4=
+github.com/fred1268/go-clap v1.2.1/go.mod h1:A5/yYBapOy6UyujlbxL7p/bX9J7bzyoMRzQKFwveXF0=
 github.com/lib/pq v1.10.9 h1:YXG7RB+JIjhP29X+OtkiDnYaXQwpS4JEWq7dtCCRUEw=
 github.com/lib/pq v1.10.9/go.mod h1:AlVN5x4E4T544tWzH6hKfbfQvm3HdbOxrmggDNAPY9o=
 github.com/mattn/go-sqlite3 v1.14.28 h1:ThEiQrnbtumT+QMknw63Befp/ce/nUPgBPMlRFEum7A=

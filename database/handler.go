@@ -61,7 +61,11 @@ func (l *CSV) Log(entry *LogEntry) error {
 func csvFallback(entry *LogEntry) error {
 
 	cfg := config.LoadConfig()
-	args := config.ParseArgs(cfg)
+	args, err := config.ParseArgs(cfg)
+
+	if err != nil {
+		return err
+	}
 
 	csvHandler, err := NewCSV(args.CsvPath)
 

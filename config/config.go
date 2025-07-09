@@ -1,24 +1,25 @@
 package config
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/fred1268/go-clap/clap"
 )
 
 type ArgsCli struct {
-	Time        string
-	Notif       string
-	Category    string
-	Description string
-	UseDatabase bool
-	ConnString  string
-	Unlimited   bool
-	Headless    bool
-	CsvPath     string
-	Kill        bool
+	Time        string `clap:"--time,-t"`
+	Notif       string `clap:"--notif,-n"`
+	Category    string `clap:"--cat,-c"`
+	Description string `clap:"--description,-l"`
+	UseDatabase bool   `clap:"--database,-d"`
+	ConnString  string `clap:"--conn,-s"`
+	Unlimited   bool   `clap:"--unlimited,-u"`
+	Headless    bool   `clap:"--headless,-H"`
+	CsvPath     string `clap:"--csvpath,-C"`
+	Kill        bool   `clap:"--kill,-k"`
 }
 
 const (
@@ -61,70 +62,57 @@ func LoadConfig() map[string]string {
 	return config
 }
 
-func ParseArgs(cfg map[string]string) ArgsCli {
-	var rawTime string
-	var notif string
-	var category string
-	var description string
-	var useDatabase bool
-	var connString string
-	var unlimited bool
-	var headless bool
-	var csvPath string
-	var kill bool
+func ParseArgs(cfg map[string]string) (*ArgsCli, error) {
+	args := os.Args
+	cli := &ArgsCli{}
 
-	flag.StringVar(&rawTime, "t", "", "Time scheduled for the notification (e.g. <mm>m = Time and suffix \"m\" for minutes, or <hh:mm>Hour:minute")
-	flag.StringVar(&category, "c", "", "Category: The category of the task to be executed during focus time. e.g. work.")
-	flag.StringVar(&notif, "n", "", "Notification title: The title for the notification to be shown")
-	flag.BoolVar(&useDatabase, "d", false, "Indicate whether a SQL database will be used")
-	flag.StringVar(&connString, "s", "", "Connection string used to connect to the database; it only works if the database flag is enabled.")
-	flag.StringVar(&description, "l", "", "Optional: Details of the task")
-	flag.BoolVar(&kill, "k", false, "Kill a task, an category should be passed")
-	flag.StringVar(&csvPath, "C", "", "CSV path; this will be ignored if the database is enabled, but can be used as a fallback.")
-	flag.BoolVar(&unlimited, "u", false, "Unlimited time")
-	flag.BoolVar(&headless, "H", false, "Headless, disable notifications")
-	flag.Parse()
+	var err error
+	var results *clap.Results
 
-	if category == "" {
-		category = cfg["DEFAULT_CATEGORY"]
+	if results, err = clap.Parse(args[1:], cli); err != nil {
+		if len(results.Mandatory) > 0 {
+			for i, mandatory := range results.Mandatory {
+				// For some reason each mandatory is repeated
+				if i%2 != 0 {
+					fmt.Printf("Error: %s is required\n\n", mandatory)
+				}
+			}
+		}
+
+		PrintUsage()
+
+		os.Exit(1)
 	}
 
-	if csvPath == "" {
-		csvPath = cfg["CSV_PATH"]
+	if cli.Category == "" {
+		cli.Category = cfg["DEFAULT_CATEGORY"]
 	}
 
-	if notif == "" {
-		notif = cfg["DEFAULT_NOTIFICATION"]
+	if cli.CsvPath == "" {
+		cli.CsvPath = cfg["CSV_PATH"]
 	}
 
-	if !useDatabase {
-		useDatabase = cfg["USE_DATABASE"] == "true"
+	if cli.Notif == "" {
+		cli.Notif = cfg["DEFAULT_NOTIFICATION"]
 	}
 
-	if !headless {
-		headless = cfg["HEADLESS"] == "true"
+	if !cli.UseDatabase {
+		cli.UseDatabase = cfg["USE_DATABASE"] == "true"
 	}
 
-	if category == "" {
-		category = defaultCategory
+	if !cli.Headless {
+		cli.Headless = cfg["HEADLESS"] == "true"
 	}
 
-	if notif == "" {
-		notif = defaultNotif
+	if cli.Category == "" {
+		cli.Category = defaultCategory
 	}
 
-	return ArgsCli{
-		Time:        rawTime,
-		Notif:       notif,
-		Category:    category,
-		Description: description,
-		UseDatabase: useDatabase,
-		ConnString:  connString,
-		Unlimited:   unlimited,
-		Headless:    headless,
-		CsvPath:     csvPath,
-		Kill:        kill,
+	if cli.Notif == "" {
+		cli.Notif = defaultNotif
 	}
+
+	return cli, nil
 }
 
 func ValidateArgs(args *ArgsCli, cfg map[string]string) error {
@@ -149,4 +137,25 @@ func ValidateArgs(args *ArgsCli, cfg map[string]string) error {
 	}
 
 	return nil
+}
+
+func PrintUsage() {
+	fmt.Println("Usage: program [options]")
+	fmt.Println("\nOptions:")
+	fmt.Printf("  -t, --time         Time scheduled for the notification (required unless --unlimited or --kill)\n")
+	fmt.Printf("                     Format: <mm>m for minutes, or <hh:mm> for hour:minute\n")
+	fmt.Printf("  -c, --cat         Category of the task (e.g., 'work')\n")
+	fmt.Printf("  -n, --notif       Notification title to be shown\n")
+	fmt.Printf("  -l, --description Optional details of the task\n")
+	fmt.Printf("  -d, --database    Enable SQL database usage\n")
+	fmt.Printf("  -s, --conn        Database connection string (required if --database is set)\n")
+	fmt.Printf("  -u, --unlimited   Set unlimited time\n")
+	fmt.Printf("  -H, --headless    Disable notifications\n")
+	fmt.Printf("  -C, --csvpath     CSV file path (ignored if database is enabled)\n")
+	fmt.Printf("  -k, --kill        Kill a task (requires category)\n")
+	fmt.Println("\nConfiguration:")
+	fmt.Printf("  Config file: ~/.jnconfig\n")
+	fmt.Printf("  Supported config keys: DEFAULT_CATEGORY, CSV_PATH, DEFAULT_NOTIFICATION,\n")
+	fmt.Printf("                        USE_DATABASE, HEADLESS, CONN\n")
+	fmt.Println()
 }

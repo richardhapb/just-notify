@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"just-notify/commands"
 	"just-notify/config"
@@ -28,10 +27,14 @@ func main() {
 		cfg:         config.LoadConfig(),
 	}
 
-	args := config.ParseArgs(app.cfg)
+	args, err := config.ParseArgs(app.cfg)
 
-	if err := config.ValidateArgs(&args, app.cfg); err != nil {
-		flag.PrintDefaults()
+	if err != nil {
+		log.Fatalf("error parsing the arguments: %s", err)
+	}
+
+	if err := config.ValidateArgs(args, app.cfg); err != nil {
+		config.PrintUsage()
 		log.Fatalln(err)
 	}
 
@@ -155,9 +158,6 @@ func main() {
 		}
 	}()
 
-	select {
-	case <-done:
-		log.Println("Shutdown successfully")
-	}
+	<-done
+	log.Println("Shutdown successfully")
 }
-
